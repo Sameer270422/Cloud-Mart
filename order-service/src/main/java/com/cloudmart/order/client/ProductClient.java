@@ -36,6 +36,17 @@ public class ProductClient {
                 Void.class);
     }
 
+    /**
+     * Compensating call: undoes a previous reserveStock. Used when a later
+     * item in the same order fails, so earlier reservations don't leak.
+     */
+    public void releaseStock(Long productId, int quantity) {
+        restTemplate.postForObject(
+                productServiceUrl + "/api/products/" + productId + "/release",
+                Map.of("quantity", quantity),
+                Void.class);
+    }
+
     @Data
     public static class ProductDto {
         private Long id;

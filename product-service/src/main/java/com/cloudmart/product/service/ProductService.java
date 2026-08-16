@@ -56,4 +56,15 @@ public class ProductService {
         product.setStockQuantity(product.getStockQuantity() - quantity);
         return productRepository.save(product);
     }
+
+    /**
+     * Compensating action for decrementStock, used by order-service to release
+     * already-reserved stock when a later item in the same order fails to reserve.
+     */
+    @Transactional
+    public Product incrementStock(Long id, int quantity) {
+        Product product = findById(id);
+        product.setStockQuantity(product.getStockQuantity() + quantity);
+        return productRepository.save(product);
+    }
 }
