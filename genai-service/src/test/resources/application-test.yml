@@ -1,0 +1,6 @@
+cloudmart:
+  anthropic:
+    api-key: ""
+  services:
+    product-service-url: http://localhost:8082
+    order-service-url: http://localhost:8083
