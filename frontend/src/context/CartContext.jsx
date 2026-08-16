@@ -18,6 +18,15 @@ export function CartProvider({ children }) {
   };
 
   const removeItem = (productId) => setItems((prev) => prev.filter((i) => i.productId !== productId));
+
+  const setQuantity = (productId, quantity) => {
+    if (quantity <= 0) {
+      removeItem(productId);
+      return;
+    }
+    setItems((prev) => prev.map((i) => (i.productId === productId ? { ...i, quantity } : i)));
+  };
+
   const clear = () => setItems([]);
 
   const total = useMemo(
@@ -26,7 +35,7 @@ export function CartProvider({ children }) {
   );
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, clear, total }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, setQuantity, clear, total }}>
       {children}
     </CartContext.Provider>
   );

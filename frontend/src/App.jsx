@@ -33,6 +33,7 @@ export default function App() {
           />
         </Routes>
       </div>
+      <footer className="footer">CloudMart &mdash; built on Spring Boot microservices, React, and Claude.</footer>
     </>
   );
 }
