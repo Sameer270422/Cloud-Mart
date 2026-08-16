@@ -39,4 +39,7 @@ export const api = {
   placeOrder: (data) => request('/api/orders', { method: 'POST', body: JSON.stringify(data) }),
   listOrders: (userId) => request(`/api/orders?userId=${userId}`),
   listNotifications: () => request('/api/notifications'),
+  semanticSearch: (q, limit = 12) =>
+    request(`/api/assistant/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  assistantChat: (data) => request('/api/assistant/chat', { method: 'POST', body: JSON.stringify(data) }),
 };

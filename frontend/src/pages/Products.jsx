@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useCart } from '../context/CartContext.jsx';
+import { useAssistant } from '../context/AssistantContext.jsx';
 
 const CATEGORY_STYLE = {
   electronics: { emoji: '💻', gradient: 'linear-gradient(135deg, #7c3aed, #2563eb)' },
@@ -28,7 +29,9 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [aiSearch, setAiSearch] = useState(false);
   const { addItem } = useCart();
+  const { openAssistant } = useAssistant();
 
   useEffect(() => {
     api.listProducts()
@@ -39,12 +42,36 @@ export default function Products() {
 
   const handleSearch = async (e) => {
     e.preventDefault();
+    if (!search.trim()) {
+      setLoading(true);
+      setError('');
+      try {
+        setProducts(await api.listProducts());
+        setAiSearch(false);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      setProducts(await api.listProducts(search ? { search } : {}));
-    } catch (e) {
-      setError(e.message);
+      // Semantic search understands intent ("something to keep coffee hot"),
+      // not just keyword overlap. If the AI assistant is unavailable (no
+      // API key configured, or genai-service down), fall back to the
+      // catalog's plain keyword search so browsing still works.
+      setProducts(await api.semanticSearch(search));
+      setAiSearch(true);
+    } catch (aiError) {
+      try {
+        setProducts(await api.listProducts({ search }));
+        setAiSearch(false);
+      } catch (e) {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -54,18 +81,31 @@ export default function Products() {
     <div>
       <div className="hero">
         <h1>Find what you need, faster.</h1>
-        <p>Browse the CloudMart catalog or search in your own words.</p>
+        <p>Search in your own words &mdash; "something to keep coffee hot" works as well as a product name.</p>
         <form onSubmit={handleSearch} className="search-bar">
           <input
-            placeholder="Search products..."
+            placeholder="Search products, or describe what you need..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button type="submit">Search</button>
         </form>
+        <button
+          type="button"
+          className="secondary"
+          style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
+          onClick={() => openAssistant()}
+        >
+          ✨ Or ask the AI assistant
+        </button>
       </div>
 
       {error && <p className="error">{error}</p>}
+      {aiSearch && !loading && products.length > 0 && (
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '-0.5rem' }}>
+          ✨ Ranked by Claude based on what you described
+        </p>
+      )}
 
       {loading ? (
         <div className="grid">

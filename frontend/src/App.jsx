@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
+import AssistantWidget from './components/AssistantWidget.jsx';
 import Products from './pages/Products.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -34,6 +35,7 @@ export default function App() {
         </Routes>
       </div>
       <footer className="footer">CloudMart &mdash; built on Spring Boot microservices, React, and Claude.</footer>
+      <AssistantWidget />
     </>
   );
 }
