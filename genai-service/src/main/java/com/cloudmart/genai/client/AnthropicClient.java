@@ -10,6 +10,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -17,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -30,6 +32,7 @@ import java.util.function.Supplier;
  * retry + circuit breaker, same pattern as order-service's ProductClient.
  */
 @Component
+@Slf4j
 public class AnthropicClient {
 
     private static final String RESILIENCE_INSTANCE = "anthropic";
@@ -78,7 +81,18 @@ public class AnthropicClient {
             return decorated.get();
         } catch (CallNotPermittedException ex) {
             throw new AssistantUnavailableException("AI assistant circuit breaker is open", ex);
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden ex) {
+            // Far and away the most common cause: ANTHROPIC_API_KEY is unset,
+            // malformed, or has been revoked. Logged at ERROR (not just
+            // returned as a 503) so this shows up immediately in service
+            // logs instead of requiring someone to manually replay the call
+            // against api.anthropic.com to find out why.
+            log.error("Anthropic API rejected the request as unauthorized - check that " +
+                    "ANTHROPIC_API_KEY is set correctly (no stray whitespace/quotes) and hasn't " +
+                    "been revoked: {}", ex.getResponseBodyAsString());
+            throw new AssistantUnavailableException("AI assistant is misconfigured (authentication failed)", ex);
         } catch (RestClientException ex) {
+            log.error("AI assistant call failed", ex);
             throw new AssistantUnavailableException("AI assistant call failed: " + ex.getMessage(), ex);
         }
     }

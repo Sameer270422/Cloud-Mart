@@ -10,6 +10,9 @@ import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -34,10 +37,12 @@ class AnthropicClientTest {
                 .maxAttempts(2)
                 .waitDuration(Duration.ofMillis(1))
                 .retryExceptions(ResourceAccessException.class)
+                .ignoreExceptions(HttpClientErrorException.class)
                 .build();
         CircuitBreakerConfig cbConfig = CircuitBreakerConfig.custom()
                 .slidingWindowSize(10)
                 .minimumNumberOfCalls(10)
+                .ignoreExceptions(HttpClientErrorException.class)
                 .build();
 
         return new AnthropicClient(restTemplate, apiKey, "claude-sonnet-5",
@@ -80,5 +85,23 @@ class AnthropicClientTest {
                 .isInstanceOf(AssistantUnavailableException.class);
 
         verify(restTemplate, times(2)).postForObject(anyString(), any(), eq(MessagesResponse.class));
+    }
+
+    @Test
+    void doesNotRetryAnAuthFailureAndSurfacesAMisconfigurationMessage() {
+        AnthropicClient client = client("bad-key");
+        var unauthorized = HttpClientErrorException.create(
+                HttpStatus.UNAUTHORIZED, "Unauthorized", HttpHeaders.EMPTY,
+                "{\"error\":{\"message\":\"invalid x-api-key\"}}".getBytes(), null);
+        when(restTemplate.postForObject(anyString(), any(), eq(MessagesResponse.class)))
+                .thenThrow(unauthorized);
+
+        assertThatThrownBy(() -> client.sendMessage("system", List.of(), List.of()))
+                .isInstanceOf(AssistantUnavailableException.class)
+                .hasMessageContaining("misconfigured");
+
+        // A 401 is an auth/config problem, not transient infrastructure
+        // flakiness - it should fail on the first attempt, not be retried.
+        verify(restTemplate, times(1)).postForObject(anyString(), any(), eq(MessagesResponse.class));
     }
 }
