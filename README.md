@@ -23,14 +23,20 @@ flowchart LR
     GW --> PS[product-service :8082<br/>Catalog + Inventory]
     GW --> OS[order-service :8083<br/>Orders]
     GW --> NS[notification-service :8084]
+    GW --> GS[genai-service :8085<br/>AI assistant + semantic search]
 
     OS -- REST: check/reserve stock --> PS
     OS -- publish OrderEvent --> K[(Kafka: order-events)]
     K -- consume --> NS
 
+    GS -- REST: fetch catalog --> PS
+    GS -- REST: look up orders --> OS
+    GS -- tool-calling --> LLM[Claude API]
+
     US --> DB1[(PostgreSQL: users)]
     PS --> DB2[(PostgreSQL: products)]
     OS --> DB3[(PostgreSQL: orders)]
+    NS --> DB4[(PostgreSQL: notifications)]
 ```
 
 **Why event-driven?** `order-service` doesn't call `notification-service`
@@ -38,6 +44,12 @@ directly. It publishes an `OrderEvent` to Kafka and moves on — this keeps
 services decoupled, lets you add new consumers (e.g. analytics, fraud
 detection) without touching `order-service`, and means a slow/down
 notification pipeline never blocks checkout.
+
+**Why does `genai-service` call the other services over REST instead of
+reading their databases?** Same reason as everywhere else in this system —
+each service owns its data, and `genai-service` is just another consumer of
+the public API, following the exact pattern `order-service` already uses to
+talk to `product-service` (timeouts + retry + circuit breaker).
 
 ## Services
 
@@ -47,27 +59,57 @@ notification pipeline never blocks checkout.
 | `user-service` | 8081 | Registration, login, JWT issuance, BCrypt password hashing |
 | `product-service` | 8082 | Product catalog CRUD, stock reservation |
 | `order-service` | 8083 | Order placement, calls `product-service` to reserve stock, publishes `OrderEvent` to Kafka |
-| `notification-service` | 8084 | Kafka consumer that simulates order-confirmation notifications |
-| `frontend` | 3000 | React + Vite SPA: browse products, cart, checkout, order history |
+| `notification-service` | 8084 | Kafka consumer that persists order-confirmation notifications |
+| `genai-service` | 8085 | Claude-powered shopping assistant (tool-calling) + semantic product search |
+| `frontend` | 3000 | React + Vite SPA: browse products, cart, checkout, order history, AI assistant |
+
+## AI shopping assistant (`genai-service`)
+
+A chat endpoint backed by Claude with tool-calling, plus a semantic search
+endpoint that powers the main product search bar - both share one
+implementation:
+
+- **`search_products`** - instead of a vector database, the live catalog
+  (small enough to fit comfortably in context) is handed to Claude along
+  with the shopper's query, and Claude ranks it by relevance/intent rather
+  than literal keyword match (`"something to keep coffee hot"` finds a
+  thermos). This is exposed both as `GET /api/assistant/search` (used
+  directly by the product search bar) and as a tool the chat assistant can
+  call - one implementation, two entry points. At catalog sizes where this
+  stops being practical, the natural next step is embeddings + pgvector.
+- **`get_order_status` / `list_my_orders`** - the assistant can answer
+  "where's my order" without the user leaving the chat. Order lookups are
+  scoped server-side to the requesting user (an order that exists but
+  belongs to someone else is treated as not found).
+- Calls to Claude are wrapped in the same timeout/retry/circuit-breaker
+  pattern used for `order-service`'s call to `product-service` - if the
+  assistant is unreachable, `/api/assistant/**` degrades to a 503 instead of
+  hanging or taking anything else down with it.
+
+Requires an `ANTHROPIC_API_KEY` (see **Running locally** below). Without
+one, the rest of the app works normally - only the assistant and semantic
+search degrade.
 
 ## Tech Stack
 
-- **Backend:** Java 17, Spring Boot 3, Spring Data JPA, Spring Security (JWT), Spring Kafka, Spring Cloud Gateway
+- **Backend:** Java 17, Spring Boot 3, Spring Data JPA, Spring Security (JWT), Spring Kafka, Spring Cloud Gateway, Resilience4j
+- **AI:** Anthropic Claude (Messages API, tool-calling)
 - **Frontend:** React 18, React Router, Vite
 - **Messaging:** Apache Kafka
 - **Data:** PostgreSQL (one schema per service — database-per-service pattern)
 - **Infra:** Docker, Docker Compose, GitHub Actions CI
-- **Testing:** JUnit 5, Spring Boot Test, Embedded Kafka, AssertJ
+- **Testing:** JUnit 5, Spring Boot Test, Embedded Kafka, AssertJ, Mockito
 
 ## Running locally
 
 ### Option A — Docker Compose (recommended)
 
 ```bash
+cp .env.example .env   # then fill in ANTHROPIC_API_KEY
 docker compose up --build
 ```
 
-This starts Zookeeper, Kafka, three PostgreSQL instances, all five backend
+This starts Zookeeper, Kafka, four PostgreSQL instances, all six backend
 services, and the frontend. Once healthy:
 
 - Frontend: http://localhost:3000
@@ -84,7 +126,8 @@ mvn spring-boot:run
 
 You'll need PostgreSQL and Kafka running locally (or point `DB_URL` /
 `KAFKA_BOOTSTRAP_SERVERS` env vars at your own instances — see each
-service's `application.yml`).
+service's `application.yml`). For `genai-service`, export `ANTHROPIC_API_KEY`
+first.
 
 For the frontend:
 
@@ -109,9 +152,11 @@ npm run dev
 ## Testing
 
 ```bash
-cd order-service && mvn test   # uses spring-kafka-test's embedded broker
-cd product-service && mvn test # uses H2 in-memory DB
+cd order-service && mvn test    # uses spring-kafka-test's embedded broker
+cd product-service && mvn test  # uses H2 in-memory DB
 cd user-service && mvn test
+cd notification-service && mvn test  # embedded Kafka + H2
+cd genai-service && mvn test    # Claude calls are mocked - no API key needed
 ```
 
 ## CI/CD
@@ -128,3 +173,8 @@ ECR, deploy to EKS/ECS).
 - Add a `payment-service` and use Kafka choreography/saga for distributed
   transactions across order → payment → inventory
 - Ship metrics to Prometheus/Grafana and traces via OpenTelemetry
+- Move `genai-service`'s conversation state from in-memory to Redis so it
+  survives restarts and works across replicas
+- If the catalog grows past what comfortably fits in an LLM context window,
+  swap the in-context ranking in `SemanticSearchService` for embeddings
+  (e.g. Voyage AI, Anthropic's recommended embeddings partner) + pgvector

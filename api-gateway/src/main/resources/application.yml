@@ -29,6 +29,10 @@ spring:
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/notifications/**
+        - id: genai-service
+          uri: ${GENAI_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/assistant/**
 
 management:
   endpoints:
