@@ -24,6 +24,31 @@ function ProductCardSkeleton() {
   return <div className="skeleton" />;
 }
 
+// No product photography exists for this catalog, so each product gets a
+// deterministic (seeded by id, so it's stable across reloads) stock photo.
+// If the CDN is unreachable, onError falls back to the gradient+emoji
+// treatment rather than showing a broken image icon.
+function ProductThumb({ product }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const style = categoryStyle(product.category);
+
+  return (
+    <div className="product-thumb" style={{ background: style.gradient }}>
+      {imageFailed ? (
+        <span aria-hidden="true">{style.emoji}</span>
+      ) : (
+        <img
+          className="product-thumb-img"
+          src={`https://picsum.photos/seed/${product.id}/400/300`}
+          alt={product.name}
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
@@ -121,13 +146,10 @@ export default function Products() {
       ) : (
         <div className="grid">
           {products.map((p) => {
-            const style = categoryStyle(p.category);
             const price = p.price.toFixed ? p.price.toFixed(2) : p.price;
             return (
               <div className="card product-card" key={p.id}>
-                <div className="product-thumb" style={{ background: style.gradient }}>
-                  <span aria-hidden="true">{style.emoji}</span>
-                </div>
+                <ProductThumb product={p} />
                 <div className="product-body">
                   <span className="badge">{p.category}</span>
                   <h3>{p.name}</h3>
