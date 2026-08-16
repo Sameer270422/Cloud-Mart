@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 
 export default function Cart() {
-  const { items, removeItem, total, clear } = useCart();
+  const { items, removeItem, setQuantity, total, clear } = useCart();
   const { user } = useAuth();
   const [error, setError] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -33,24 +33,48 @@ export default function Cart() {
   };
 
   if (items.length === 0) {
-    return <div><h1>Your cart</h1><p>Your cart is empty.</p></div>;
+    return (
+      <div>
+        <div className="page-header"><h1>Your cart</h1></div>
+        <div className="empty-state">
+          <div className="icon">🛒</div>
+          <h3>Your cart is empty</h3>
+          <p>Add something you like from the catalog.</p>
+          <Link to="/" className="btn">Browse products</Link>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h1>Your cart</h1>
+      <div className="page-header"><h1>Your cart</h1></div>
       {error && <p className="error">{error}</p>}
       {items.map((i) => (
-        <div className="card" key={i.productId} style={{ marginBottom: '0.75rem' }}>
-          <strong>{i.name}</strong> &times; {i.quantity}
-          <span className="price" style={{ float: 'right' }}>${(i.price * i.quantity).toFixed(2)}</span>
-          <div>
-            <button className="secondary" onClick={() => removeItem(i.productId)}>Remove</button>
+        <div className="card cart-item" key={i.productId}>
+          <div className="grow">
+            <strong>{i.name}</strong>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>${i.price.toFixed(2)} each</span>
           </div>
+          <div className="qty-stepper">
+            <button className="secondary" onClick={() => setQuantity(i.productId, i.quantity - 1)} aria-label="Decrease quantity">−</button>
+            <span>{i.quantity}</span>
+            <button className="secondary" onClick={() => setQuantity(i.productId, i.quantity + 1)} aria-label="Increase quantity">+</button>
+          </div>
+          <span className="price">${(i.price * i.quantity).toFixed(2)}</span>
+          <button className="danger" onClick={() => removeItem(i.productId)}>Remove</button>
         </div>
       ))}
-      <h3>Total: ${total.toFixed(2)}</h3>
-      <button disabled={placing} onClick={checkout}>{placing ? 'Placing order...' : 'Checkout'}</button>
+
+      <div className="cart-summary">
+        <div className="row">
+          <span style={{ color: 'var(--text-muted)' }}>Total</span>
+          <h3 style={{ margin: 0 }}>${total.toFixed(2)}</h3>
+        </div>
+        <button disabled={placing} onClick={checkout} style={{ width: '100%' }}>
+          {placing ? 'Placing order...' : 'Checkout'}
+        </button>
+      </div>
     </div>
   );
 }
