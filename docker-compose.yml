@@ -1,0 +1,129 @@
+version: "3.8"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  postgres-users:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudmart_users
+      POSTGRES_USER: cloudmart
+      POSTGRES_PASSWORD: cloudmart
+    ports:
+      - "5433:5432"
+    volumes:
+      - users_data:/var/lib/postgresql/data
+
+  postgres-products:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudmart_products
+      POSTGRES_USER: cloudmart
+      POSTGRES_PASSWORD: cloudmart
+    ports:
+      - "5434:5432"
+    volumes:
+      - products_data:/var/lib/postgresql/data
+
+  postgres-orders:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudmart_orders
+      POSTGRES_USER: cloudmart
+      POSTGRES_PASSWORD: cloudmart
+    ports:
+      - "5435:5432"
+    volumes:
+      - orders_data:/var/lib/postgresql/data
+
+  user-service:
+    build: ./user-service
+    depends_on:
+      - postgres-users
+    environment:
+      DB_URL: jdbc:postgresql://postgres-users:5432/cloudmart_users
+      DB_USER: cloudmart
+      DB_PASSWORD: cloudmart
+    ports:
+      - "8081:8081"
+
+  product-service:
+    build: ./product-service
+    depends_on:
+      - postgres-products
+    environment:
+      DB_URL: jdbc:postgresql://postgres-products:5432/cloudmart_products
+      DB_USER: cloudmart
+      DB_PASSWORD: cloudmart
+    ports:
+      - "8082:8082"
+
+  order-service:
+    build: ./order-service
+    depends_on:
+      - postgres-orders
+      - kafka
+      - product-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres-orders:5432/cloudmart_orders
+      DB_USER: cloudmart
+      DB_PASSWORD: cloudmart
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PRODUCT_SERVICE_URL: http://product-service:8082
+    ports:
+      - "8083:8083"
+
+  notification-service:
+    build: ./notification-service
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8084:8084"
+
+  api-gateway:
+    build: ./api-gateway
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - notification-service
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      ORDER_SERVICE_URL: http://order-service:8083
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - api-gateway
+    ports:
+      - "3000:80"
+
+volumes:
+  users_data:
+  products_data:
+  orders_data:

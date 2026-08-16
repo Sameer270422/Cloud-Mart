@@ -1,0 +1,28 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cloudmart_products}
+    username: ${DB_USER:cloudmart}
+    password: ${DB_PASSWORD:cloudmart}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    # Run data.sql AFTER Hibernate creates the schema (ddl-auto: update),
+    # not before - otherwise the seed insert fails because the table
+    # doesn't exist yet.
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
