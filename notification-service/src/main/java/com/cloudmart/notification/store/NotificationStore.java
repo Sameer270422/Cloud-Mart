@@ -1,32 +1,41 @@
 package com.cloudmart.notification.store;
 
 import com.cloudmart.notification.dto.OrderEvent;
+import com.cloudmart.notification.model.Notification;
+import com.cloudmart.notification.repository.NotificationRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 
 /**
- * In-memory ring buffer of recent notifications so the /api/notifications
- * endpoint has something to show without needing a database for this service.
+ * Persists recent notifications so /api/notifications survives a restart
+ * and can be scaled beyond a single instance - it used to be an in-memory
+ * ring buffer, which lost everything on restart and couldn't be shared
+ * across replicas.
  */
 @Component
+@RequiredArgsConstructor
 public class NotificationStore {
 
-    private static final int MAX_SIZE = 200;
-    private final LinkedList<NotificationRecord> notifications = new LinkedList<>();
+    private final NotificationRepository notificationRepository;
 
-    public synchronized void add(OrderEvent event, String message) {
-        notifications.addFirst(new NotificationRecord(event.orderId(), event.userId(), message, Instant.now()));
-        if (notifications.size() > MAX_SIZE) {
-            notifications.removeLast();
-        }
+    @Transactional
+    public void add(OrderEvent event, String message) {
+        notificationRepository.save(Notification.builder()
+                .orderId(event.orderId())
+                .userId(event.userId())
+                .message(message)
+                .sentAt(Instant.now())
+                .build());
     }
 
-    public synchronized List<NotificationRecord> recent() {
-        return Collections.unmodifiableList(new LinkedList<>(notifications));
+    public List<NotificationRecord> recent() {
+        return notificationRepository.findTop200ByOrderBySentAtDesc().stream()
+                .map(n -> new NotificationRecord(n.getOrderId(), n.getUserId(), n.getMessage(), n.getSentAt()))
+                .toList();
     }
 
     public record NotificationRecord(Long orderId, Long userId, String message, Instant sentAt) {}

@@ -55,6 +55,17 @@ services:
     volumes:
       - orders_data:/var/lib/postgresql/data
 
+  postgres-notifications:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudmart_notifications
+      POSTGRES_USER: cloudmart
+      POSTGRES_PASSWORD: cloudmart
+    ports:
+      - "5436:5432"
+    volumes:
+      - notifications_data:/var/lib/postgresql/data
+
   user-service:
     build: ./user-service
     depends_on:
@@ -95,8 +106,12 @@ services:
   notification-service:
     build: ./notification-service
     depends_on:
+      - postgres-notifications
       - kafka
     environment:
+      DB_URL: jdbc:postgresql://postgres-notifications:5432/cloudmart_notifications
+      DB_USER: cloudmart
+      DB_PASSWORD: cloudmart
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     ports:
       - "8084:8084"
@@ -127,3 +142,4 @@ volumes:
   users_data:
   products_data:
   orders_data:
+  notifications_data:

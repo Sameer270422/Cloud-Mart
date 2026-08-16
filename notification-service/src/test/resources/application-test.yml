@@ -1,4 +1,12 @@
 spring:
+  datasource:
+    url: jdbc:h2:mem:notificationtestdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
   kafka:
     bootstrap-servers: ${spring.embedded.kafka.brokers}
 
