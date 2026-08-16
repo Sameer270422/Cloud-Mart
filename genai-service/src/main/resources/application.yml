@@ -22,11 +22,19 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 3
+        # An auth failure or bad request (4xx) is not infrastructure
+        # flakiness - retrying it wastes calls, and letting it count
+        # toward the breaker means one bad API key trips the breaker for
+        # every user, turning a config problem into an outage.
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
   retry:
     instances:
       anthropic:
         max-attempts: 2
         wait-duration: 500ms
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
 
 management:
   endpoints:
