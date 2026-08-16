@@ -54,4 +54,12 @@ public class ProductController {
         int quantity = body.getOrDefault("quantity", 1);
         return productService.decrementStock(id, quantity);
     }
+
+    // Compensating endpoint: order-service calls this to undo a reservation
+    // (e.g. a later item in the same order failed to reserve).
+    @PostMapping("/{id}/release")
+    public Product releaseStock(@PathVariable Long id, @RequestBody Map<String, Integer> body) {
+        int quantity = body.getOrDefault("quantity", 1);
+        return productService.incrementStock(id, quantity);
+    }
 }
