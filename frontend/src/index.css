@@ -308,6 +308,10 @@ form { max-width: 380px; display: flex; flex-direction: column; }
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at 85% 20%, rgba(255,255,255,0.25), transparent 55%);
+  /* Purely decorative - without this, this full-size overlay sits on top
+     of the search input and buttons in DOM/stacking order (::after paints
+     last) and silently swallows every click across the whole hero. */
+  pointer-events: none;
 }
 
 .hero h1 {
