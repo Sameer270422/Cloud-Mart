@@ -3,6 +3,7 @@ package com.cloudmart.order.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
@@ -12,6 +13,6 @@ public record CreateOrderRequest(
 ) {
     public record Item(
             @NotNull Long productId,
-            @NotNull Integer quantity
+            @NotNull @Positive Integer quantity
     ) {}
 }
