@@ -87,8 +87,9 @@ export default function Products() {
             placeholder="Search products, or describe what you need..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            disabled={loading}
           />
-          <button type="submit">Search</button>
+          <button type="submit" disabled={loading}>{loading ? 'Searching…' : 'Search'}</button>
         </form>
         <button
           type="button"
