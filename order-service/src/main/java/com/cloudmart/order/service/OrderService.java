@@ -26,9 +26,9 @@ public class OrderService {
     private final OrderEventProducer orderEventProducer;
 
     @Transactional
-    public Order placeOrder(CreateOrderRequest request) {
+    public Order placeOrder(CreateOrderRequest request, Long userId) {
         Order order = Order.builder()
-                .userId(request.userId())
+                .userId(userId)
                 .status(Order.OrderStatus.CREATED)
                 .totalAmount(BigDecimal.ZERO)
                 .build();
@@ -92,9 +92,5 @@ public class OrderService {
 
     public List<Order> findByUser(Long userId) {
         return orderRepository.findByUserId(userId);
-    }
-
-    public List<Order> findAll() {
-        return orderRepository.findAll();
     }
 }

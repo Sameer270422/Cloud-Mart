@@ -64,6 +64,15 @@ services:
     volumes:
       - notifications_data:/var/lib/postgresql/data
 
+  # user-service, product-service, order-service, notification-service, and
+  # genai-service deliberately have no "ports:" mapping - api-gateway is the
+  # only supported entry point now that it enforces JWT auth (see
+  # api-gateway's JwtAuthenticationFilter). They're still reachable from
+  # each other and from api-gateway over the internal compose network by
+  # service name; publishing their ports to the host would let anyone
+  # bypass the gateway (and its auth check) entirely by hitting them
+  # directly. For local debugging, use `docker compose exec <service> sh`
+  # or temporarily add a ports: block back.
   user-service:
     build: ./user-service
     depends_on:
@@ -72,8 +81,7 @@ services:
       DB_URL: jdbc:postgresql://postgres-users:5432/cloudmart_users
       DB_USER: cloudmart
       DB_PASSWORD: cloudmart
-    ports:
-      - "8081:8081"
+      JWT_SECRET: ${JWT_SECRET:-cloudmart-super-secret-signing-key-change-me-in-prod-0123456789}
 
   product-service:
     build: ./product-service
@@ -83,8 +91,6 @@ services:
       DB_URL: jdbc:postgresql://postgres-products:5432/cloudmart_products
       DB_USER: cloudmart
       DB_PASSWORD: cloudmart
-    ports:
-      - "8082:8082"
 
   order-service:
     build: ./order-service
@@ -98,8 +104,6 @@ services:
       DB_PASSWORD: cloudmart
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PRODUCT_SERVICE_URL: http://product-service:8082
-    ports:
-      - "8083:8083"
 
   notification-service:
     build: ./notification-service
@@ -111,8 +115,6 @@ services:
       DB_USER: cloudmart
       DB_PASSWORD: cloudmart
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    ports:
-      - "8084:8084"
 
   genai-service:
     build: ./genai-service
@@ -124,8 +126,6 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       PRODUCT_SERVICE_URL: http://product-service:8082
       ORDER_SERVICE_URL: http://order-service:8083
-    ports:
-      - "8085:8085"
 
   api-gateway:
     build: ./api-gateway
@@ -141,6 +141,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:8083
       NOTIFICATION_SERVICE_URL: http://notification-service:8084
       GENAI_SERVICE_URL: http://genai-service:8085
+      JWT_SECRET: ${JWT_SECRET:-cloudmart-super-secret-signing-key-change-me-in-prod-0123456789}
     ports:
       - "8080:8080"
 

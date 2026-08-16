@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../context/AuthContext.jsx';
 
 const STATUS_BADGE = {
   CREATED: 'neutral',
@@ -13,14 +12,13 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
 
   useEffect(() => {
-    api.listOrders(user.id)
+    api.listOrders()
       .then(setOrders)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [user.id]);
+  }, []);
 
   return (
     <div>

@@ -13,12 +13,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
+
+    private static final Long USER_ID = 42L;
 
     @Mock
     private OrderRepository orderRepository;
@@ -37,7 +40,7 @@ class OrderServiceTest {
     void releasesEarlierReservationsWhenALaterItemFailsToReserve() {
         var item1 = new CreateOrderRequest.Item(1L, 2);
         var item2 = new CreateOrderRequest.Item(2L, 1);
-        var request = new CreateOrderRequest(42L, List.of(item1, item2));
+        var request = new CreateOrderRequest(List.of(item1, item2));
 
         var product1 = new ProductClient.ProductDto();
         product1.setId(1L);
@@ -49,7 +52,7 @@ class OrderServiceTest {
 
         OrderService service = orderService();
 
-        assertThatThrownBy(() -> service.placeOrder(request))
+        assertThatThrownBy(() -> service.placeOrder(request, USER_ID))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Product not found");
 
@@ -63,7 +66,7 @@ class OrderServiceTest {
     void releaseFailureDoesNotMaskTheOriginalOrderFailure() {
         var item1 = new CreateOrderRequest.Item(1L, 2);
         var item2 = new CreateOrderRequest.Item(2L, 1);
-        var request = new CreateOrderRequest(42L, List.of(item1, item2));
+        var request = new CreateOrderRequest(List.of(item1, item2));
 
         var product1 = new ProductClient.ProductDto();
         product1.setId(1L);
@@ -75,7 +78,7 @@ class OrderServiceTest {
         doThrow(new RuntimeException("product-service unreachable"))
                 .when(productClient).releaseStock(1L, 2);
 
-        assertThatThrownBy(() -> orderService().placeOrder(request))
+        assertThatThrownBy(() -> orderService().placeOrder(request, USER_ID))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Product not found");
     }
@@ -83,7 +86,7 @@ class OrderServiceTest {
     @Test
     void doesNotReleaseAnythingWhenTheWholeOrderSucceeds() {
         var item1 = new CreateOrderRequest.Item(1L, 2);
-        var request = new CreateOrderRequest(42L, List.of(item1));
+        var request = new CreateOrderRequest(List.of(item1));
 
         var product1 = new ProductClient.ProductDto();
         product1.setId(1L);
@@ -97,8 +100,9 @@ class OrderServiceTest {
             return o;
         });
 
-        orderService().placeOrder(request);
+        Order saved = orderService().placeOrder(request, USER_ID);
 
+        assertThat(saved.getUserId()).isEqualTo(USER_ID);
         verify(productClient).reserveStock(1L, 2);
         verify(productClient, never()).releaseStock(anyLong(), anyInt());
         verify(orderEventProducer).publishOrderCreated(any());

@@ -7,8 +7,10 @@ import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
+// No userId field here on purpose - who's placing the order comes from the
+// gateway-verified X-User-Id header (see OrderController), not from
+// something the client could set to any value it likes.
 public record CreateOrderRequest(
-        @NotNull Long userId,
         @NotEmpty @Valid List<Item> items
 ) {
     public record Item(

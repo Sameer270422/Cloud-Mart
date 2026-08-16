@@ -44,7 +44,7 @@ export default function AssistantWidget() {
     setMessages((prev) => [...prev, { role: 'user', text: message }]);
     setSending(true);
     try {
-      const res = await api.assistantChat({ conversationId, userId: user.id, message });
+      const res = await api.assistantChat({ conversationId, message });
       setConversationId(res.conversationId);
       setMessages((prev) => [...prev, { role: 'assistant', text: res.reply, productCards: res.productCards }]);
     } catch (e) {
