@@ -20,6 +20,9 @@ npm-debug.log*
 .vscode/
 .DS_Store
 
+### AI tooling (local dev only) ###
+.claude/
+
 ### Logs ###
 *.log
 logs/
