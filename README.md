@@ -81,6 +81,14 @@ implementation:
   "where's my order" without the user leaving the chat. Order lookups are
   scoped server-side to the requesting user (an order that exists but
   belongs to someone else is treated as not found).
+- **`add_to_cart`** - the only tool that *does* something rather than just
+  looking something up. The cart lives client-side (browser state, no
+  server-side cart), so the tool resolves the product, caps the requested
+  quantity to what's actually in stock, and returns a `cartAdditions` entry
+  in the chat response; the frontend adds it using the exact same
+  `addItem()` path the "Add to cart" button already calls. "Add that
+  keyboard to my cart" goes straight from conversation to cart with no
+  click required.
 - Calls to Claude are wrapped in the same timeout/retry/circuit-breaker
   pattern used for `order-service`'s call to `product-service` - if the
   assistant is unreachable, `/api/assistant/**` degrades to a 503 instead of

@@ -22,8 +22,25 @@ function ProductCardMini({ product }) {
   );
 }
 
+// Unlike ProductCardMini (a suggestion the user still has to click), this is
+// confirmation that the assistant already added the item - no button, just
+// a receipt of what happened.
+function CartAdditionMini({ item }) {
+  return (
+    <div className="assistant-product-mini">
+      <div>
+        <strong>{item.name}</strong>
+        <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--success)' }}>
+          ✓ Added ×{item.quantity} to cart
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function AssistantWidget() {
   const { user } = useAuth();
+  const { addItem } = useCart();
   const { isOpen, setIsOpen, pendingMessage, consumePendingMessage } = useAssistant();
   const [messages, setMessages] = useState([{ role: 'assistant', text: GREETING }]);
   const [input, setInput] = useState('');
@@ -46,7 +63,16 @@ export default function AssistantWidget() {
     try {
       const res = await api.assistantChat({ conversationId, message });
       setConversationId(res.conversationId);
-      setMessages((prev) => [...prev, { role: 'assistant', text: res.reply, productCards: res.productCards }]);
+      if (res.cartAdditions) {
+        res.cartAdditions.forEach((item) =>
+          addItem({ id: item.id, name: item.name, price: item.price }, item.quantity));
+      }
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: res.reply,
+        productCards: res.productCards,
+        cartAdditions: res.cartAdditions,
+      }]);
     } catch (e) {
       setMessages((prev) => [...prev, { role: 'assistant', text: `Sorry, I couldn't respond: ${e.message}` }]);
     } finally {
@@ -80,16 +106,28 @@ export default function AssistantWidget() {
           </div>
 
           <div className="assistant-messages" ref={scrollRef}>
-            {messages.map((m, i) => (
-              <div key={i} className={`assistant-bubble ${m.role}`}>
-                <p>{m.text}</p>
-                {m.productCards && m.productCards.length > 0 && (
-                  <div className="assistant-product-row">
-                    {m.productCards.map((p) => <ProductCardMini key={p.id} product={p} />)}
-                  </div>
-                )}
-              </div>
-            ))}
+            {messages.map((m, i) => {
+              // If a product was searched and added in the same turn, don't
+              // also show a clickable "Add" suggestion for it - it's
+              // already in the cart, the button would be redundant.
+              const addedIds = new Set((m.cartAdditions || []).map((item) => item.id));
+              const suggestions = (m.productCards || []).filter((p) => !addedIds.has(p.id));
+              return (
+                <div key={i} className={`assistant-bubble ${m.role}`}>
+                  <p>{m.text}</p>
+                  {suggestions.length > 0 && (
+                    <div className="assistant-product-row">
+                      {suggestions.map((p) => <ProductCardMini key={p.id} product={p} />)}
+                    </div>
+                  )}
+                  {m.cartAdditions && m.cartAdditions.length > 0 && (
+                    <div className="assistant-product-row">
+                      {m.cartAdditions.map((item, idx) => <CartAdditionMini key={idx} item={item} />)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {sending && <div className="assistant-bubble assistant"><p>Thinking…</p></div>}
           </div>
 

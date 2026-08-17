@@ -2,6 +2,8 @@ package com.cloudmart.genai.service;
 
 import com.cloudmart.genai.client.AnthropicClient;
 import com.cloudmart.genai.client.OrderServiceClient;
+import com.cloudmart.genai.client.ProductServiceClient;
+import com.cloudmart.genai.dto.CartAddition;
 import com.cloudmart.genai.dto.ChatMessage;
 import com.cloudmart.genai.dto.ContentBlocks;
 import com.cloudmart.genai.dto.MessagesResponse;
@@ -37,12 +39,18 @@ public class AssistantChatService {
 
     private static final String SYSTEM_PROMPT = """
             You are CloudMart's shopping assistant. Help customers find
-            products and check on their orders.
+            products, check on their orders, and add items to their cart.
 
             Always use the search_products tool to look up products - never
             answer from memory or guess at what's in the catalog. Use
             get_order_status for a specific order number, or list_my_orders
             if the customer just wants to know what they've ordered.
+
+            When the customer asks to add, order, or buy something, use
+            add_to_cart. If they already saw search results earlier in this
+            conversation, use the product id from those results directly -
+            don't search again just to re-find something already found. If
+            it's ambiguous which product they mean, ask instead of guessing.
 
             Keep replies short, friendly, and concrete. If a tool returns no
             results, say so plainly rather than inventing an answer.
@@ -60,6 +68,16 @@ public class AssistantChatService {
                             ),
                             "required", List.of("query"))),
             new ToolDefinition(
+                    "add_to_cart",
+                    "Add a product to the customer's cart. Use the product id from an earlier search_products result.",
+                    Map.of(
+                            "type", "object",
+                            "properties", Map.of(
+                                    "productId", Map.of("type", "integer", "description", "The id of the product to add"),
+                                    "quantity", Map.of("type", "integer", "description", "How many to add (default 1)")
+                            ),
+                            "required", List.of("productId"))),
+            new ToolDefinition(
                     "get_order_status",
                     "Look up a single order by its order number for the current customer.",
                     Map.of(
@@ -75,6 +93,7 @@ public class AssistantChatService {
 
     private final AnthropicClient anthropicClient;
     private final SemanticSearchService semanticSearchService;
+    private final ProductServiceClient productServiceClient;
     private final OrderServiceClient orderServiceClient;
     private final ObjectMapper objectMapper;
 
@@ -89,6 +108,7 @@ public class AssistantChatService {
         history.add(ChatMessage.user(List.of(ContentBlocks.text(userMessage))));
 
         List<ProductMatch> lastSearchResults = List.of();
+        List<CartAddition> cartAdditions = new ArrayList<>();
 
         for (int iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
             MessagesResponse response = anthropicClient.sendMessage(SYSTEM_PROMPT, history, TOOLS);
@@ -100,7 +120,7 @@ public class AssistantChatService {
 
             if (toolUses.isEmpty() || !"tool_use".equals(response.stopReason())) {
                 trimHistory(history);
-                return new ChatResult(convId, ContentBlocks.extractText(response.content()), lastSearchResults);
+                return new ChatResult(convId, ContentBlocks.extractText(response.content()), lastSearchResults, cartAdditions);
             }
 
             List<Map<String, Object>> toolResults = new ArrayList<>();
@@ -109,6 +129,9 @@ public class AssistantChatService {
                 if (execution.searchResults() != null) {
                     lastSearchResults = execution.searchResults();
                 }
+                if (execution.cartAddition() != null) {
+                    cartAdditions.add(execution.cartAddition());
+                }
                 toolResults.add(ContentBlocks.toolResult((String) toolUse.get("id"), execution.resultJson()));
             }
             history.add(ChatMessage.user(toolResults));
@@ -116,7 +139,8 @@ public class AssistantChatService {
 
         log.warn("Tool loop exceeded {} iterations for conversation {}", MAX_TOOL_ITERATIONS, convId);
         trimHistory(history);
-        return new ChatResult(convId, "Sorry, I'm having trouble finishing that up right now - could you try again?", lastSearchResults);
+        return new ChatResult(convId, "Sorry, I'm having trouble finishing that up right now - could you try again?",
+                lastSearchResults, cartAdditions);
     }
 
     @SuppressWarnings("unchecked")
@@ -130,25 +154,54 @@ public class AssistantChatService {
                     String query = (String) input.get("query");
                     int maxResults = input.get("maxResults") instanceof Number n ? n.intValue() : 5;
                     List<ProductMatch> matches = semanticSearchService.search(query, maxResults);
-                    yield new ToolExecution(objectMapper.writeValueAsString(matches), matches);
+                    yield new ToolExecution(objectMapper.writeValueAsString(matches), matches, null);
                 }
+                case "add_to_cart" -> executeAddToCart(input);
                 case "get_order_status" -> {
                     long orderId = ((Number) input.get("orderId")).longValue();
                     String result = orderServiceClient.getOrderForUser(orderId, userId)
                             .map(this::writeQuietly)
                             .orElse("No order with that number was found for this customer.");
-                    yield new ToolExecution(result, null);
+                    yield new ToolExecution(result, null, null);
                 }
                 case "list_my_orders" -> {
                     var orders = orderServiceClient.listByUser(userId);
-                    yield new ToolExecution(objectMapper.writeValueAsString(orders), null);
+                    yield new ToolExecution(objectMapper.writeValueAsString(orders), null, null);
                 }
-                default -> new ToolExecution("Unknown tool: " + toolName, null);
+                default -> new ToolExecution("Unknown tool: " + toolName, null, null);
             };
         } catch (Exception ex) {
             log.error("Tool execution failed for {}", toolName, ex);
-            return new ToolExecution("That lookup failed - please try again.", null);
+            return new ToolExecution("That lookup failed - please try again.", null, null);
         }
+    }
+
+    private ToolExecution executeAddToCart(Map<String, Object> input) {
+        long productId = ((Number) input.get("productId")).longValue();
+        int requestedQuantity = input.get("quantity") instanceof Number n ? n.intValue() : 1;
+
+        var product = productServiceClient.getById(productId);
+        if (product.isEmpty()) {
+            return new ToolExecution("No product with id " + productId + " exists.", null, null);
+        }
+        if (requestedQuantity <= 0) {
+            return new ToolExecution("Quantity must be at least 1.", null, null);
+        }
+
+        var p = product.get();
+        int available = p.getStockQuantity() == null ? 0 : p.getStockQuantity();
+        if (available <= 0) {
+            return new ToolExecution(p.getName() + " is currently out of stock.", null, null);
+        }
+
+        int actualQuantity = Math.min(requestedQuantity, available);
+        var addition = new CartAddition(p.getId(), p.getName(), p.getPrice(), actualQuantity);
+
+        String note = actualQuantity < requestedQuantity
+                ? " (only %d in stock, so I added %d instead of %d)".formatted(available, actualQuantity, requestedQuantity)
+                : "";
+        String result = "Added %dx %s ($%s each) to the cart.%s".formatted(actualQuantity, p.getName(), p.getPrice(), note);
+        return new ToolExecution(result, null, addition);
     }
 
     private String writeQuietly(Object value) {
@@ -167,7 +220,8 @@ public class AssistantChatService {
         }
     }
 
-    private record ToolExecution(String resultJson, List<ProductMatch> searchResults) {}
+    private record ToolExecution(String resultJson, List<ProductMatch> searchResults, CartAddition cartAddition) {}
 
-    public record ChatResult(String conversationId, String reply, List<ProductMatch> productCards) {}
+    public record ChatResult(String conversationId, String reply, List<ProductMatch> productCards,
+                              List<CartAddition> cartAdditions) {}
 }

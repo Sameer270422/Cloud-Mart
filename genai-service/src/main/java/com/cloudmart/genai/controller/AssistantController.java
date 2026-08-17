@@ -26,7 +26,7 @@ public class AssistantController {
     public ChatApiResponse chat(@Valid @RequestBody ChatApiRequest request,
                                  @RequestHeader("X-User-Id") Long userId) {
         var result = assistantChatService.chat(request.conversationId(), userId, request.message());
-        return new ChatApiResponse(result.conversationId(), result.reply(), result.productCards());
+        return new ChatApiResponse(result.conversationId(), result.reply(), result.productCards(), result.cartAdditions());
     }
 
     @GetMapping("/search")
