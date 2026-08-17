@@ -188,4 +188,25 @@ class AssistantChatServiceTest {
 
         assertThat(result.cartAdditions()).isEmpty();
     }
+
+    @Test
+    void placeOrderSetsCheckoutRequestedWithoutCallingAnyBackendService() {
+        when(anthropicClient.sendMessage(any(), any(), any()))
+                .thenReturn(toolUseResponse("place_order", Map.of()))
+                .thenReturn(finalTextResponse("Your order has been placed!"));
+
+        var result = chatService.chat(null, 1L, "yes, place my order");
+
+        assertThat(result.checkoutRequested()).isTrue();
+        verifyNoInteractions(productServiceClient, orderServiceClient);
+    }
+
+    @Test
+    void checkoutRequestedIsFalseWhenPlaceOrderIsNeverCalled() {
+        when(anthropicClient.sendMessage(any(), any(), any())).thenReturn(finalTextResponse("Sure, what are you looking for?"));
+
+        var result = chatService.chat(null, 1L, "hi");
+
+        assertThat(result.checkoutRequested()).isFalse();
+    }
 }

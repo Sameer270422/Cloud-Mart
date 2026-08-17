@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
@@ -38,6 +38,62 @@ function CartAdditionMini({ item }) {
   );
 }
 
+// The assistant can't see the cart (it lives in the browser, not the
+// backend), so it can only recognize checkout intent, not place the order
+// itself. This renders the real cart contents and only calls the actual
+// placeOrder API - same call the Cart page's checkout button makes - after
+// an explicit click here, on top of the confirmation already required in
+// the conversation itself.
+function CheckoutConfirmation() {
+  const { items, total, clear } = useCart();
+  const navigate = useNavigate();
+  const [placing, setPlacing] = useState(false);
+  const [placed, setPlaced] = useState(false);
+  const [error, setError] = useState('');
+
+  if (placed) {
+    return <p style={{ color: 'var(--success)', fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>✓ Order placed! Redirecting…</p>;
+  }
+
+  if (items.length === 0) {
+    return <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>Your cart is empty - add something first.</p>;
+  }
+
+  const confirm = async () => {
+    setPlacing(true);
+    setError('');
+    try {
+      await api.placeOrder({ items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) });
+      clear();
+      setPlaced(true);
+      setTimeout(() => navigate('/orders'), 1200);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  return (
+    <div className="assistant-checkout">
+      {items.map((i) => (
+        <div className="assistant-checkout-line" key={i.productId}>
+          <span>{i.name} &times; {i.quantity}</span>
+          <span>${(i.price * i.quantity).toFixed(2)}</span>
+        </div>
+      ))}
+      <div className="assistant-checkout-line assistant-checkout-total">
+        <strong>Total</strong>
+        <strong>${total.toFixed(2)}</strong>
+      </div>
+      {error && <p className="error" style={{ fontSize: '0.8rem' }}>{error}</p>}
+      <button onClick={confirm} disabled={placing} style={{ width: '100%' }}>
+        {placing ? 'Placing order…' : 'Confirm & Place Order'}
+      </button>
+    </div>
+  );
+}
+
 export default function AssistantWidget() {
   const { user } = useAuth();
   const { addItem } = useCart();
@@ -72,6 +128,7 @@ export default function AssistantWidget() {
         text: res.reply,
         productCards: res.productCards,
         cartAdditions: res.cartAdditions,
+        checkoutRequested: res.checkoutRequested,
       }]);
     } catch (e) {
       setMessages((prev) => [...prev, { role: 'assistant', text: `Sorry, I couldn't respond: ${e.message}` }]);
@@ -125,6 +182,7 @@ export default function AssistantWidget() {
                       {m.cartAdditions.map((item, idx) => <CartAdditionMini key={idx} item={item} />)}
                     </div>
                   )}
+                  {m.checkoutRequested && <CheckoutConfirmation />}
                 </div>
               );
             })}

@@ -6,5 +6,6 @@ public record ChatApiResponse(
         String conversationId,
         String reply,
         List<ProductMatch> productCards,
-        List<CartAddition> cartAdditions
+        List<CartAddition> cartAdditions,
+        boolean checkoutRequested
 ) {}

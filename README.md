@@ -89,6 +89,14 @@ implementation:
   `addItem()` path the "Add to cart" button already calls. "Add that
   keyboard to my cart" goes straight from conversation to cart with no
   click required.
+- **`place_order`** - checkout, gated behind two layers of confirmation
+  since it's a real mutation (creates an order, decrements stock), unlike
+  the read-only tools. Claude is instructed to ask the customer to confirm
+  before calling it at all; the backend still can't see the cart, so
+  calling the tool only sets a `checkoutRequested` flag, and the frontend
+  renders an actual order summary (read from the real cart) with its own
+  explicit "Confirm & Place Order" button - the same `placeOrder` call the
+  Cart page's checkout button makes.
 - Calls to Claude are wrapped in the same timeout/retry/circuit-breaker
   pattern used for `order-service`'s call to `product-service` - if the
   assistant is unreachable, `/api/assistant/**` degrades to a 503 instead of
