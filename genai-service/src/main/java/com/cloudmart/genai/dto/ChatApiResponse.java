@@ -5,5 +5,6 @@ import java.util.List;
 public record ChatApiResponse(
         String conversationId,
         String reply,
-        List<ProductMatch> productCards
+        List<ProductMatch> productCards,
+        List<CartAddition> cartAdditions
 ) {}
