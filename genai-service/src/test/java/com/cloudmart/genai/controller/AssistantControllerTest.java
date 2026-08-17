@@ -37,7 +37,7 @@ class AssistantControllerTest {
     void chatUsesTheHeaderUserIdNotAnythingFromTheBody() throws Exception {
         var request = new ChatApiRequest(null, "where is my order?");
         when(assistantChatService.chat(any(), eq(7L), any()))
-                .thenReturn(new AssistantChatService.ChatResult("conv-1", "Let me check.", java.util.List.of(), java.util.List.of()));
+                .thenReturn(new AssistantChatService.ChatResult("conv-1", "Let me check.", java.util.List.of(), java.util.List.of(), false));
 
         mockMvc.perform(post("/api/assistant/chat")
                         .header("X-User-Id", "7")
