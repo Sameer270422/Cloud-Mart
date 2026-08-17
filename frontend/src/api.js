@@ -11,6 +11,13 @@ async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    // A 401 while we thought we were logged in means the token is gone/
+    // expired/invalid as far as the gateway is concerned - clear local
+    // auth state so the UI doesn't keep sending a token that'll never
+    // work, and let AuthContext react (it owns the actual state).
+    if (res.status === 401 && token) {
+      window.dispatchEvent(new Event('cloudmart:unauthorized'));
+    }
     throw new Error(body.error || `Request failed with status ${res.status}`);
   }
   if (res.status === 204) return null;
@@ -37,7 +44,7 @@ export const api = {
   },
   getProduct: (id) => request(`/api/products/${id}`),
   placeOrder: (data) => request('/api/orders', { method: 'POST', body: JSON.stringify(data) }),
-  listOrders: (userId) => request(`/api/orders?userId=${userId}`),
+  listOrders: () => request('/api/orders'),
   listNotifications: () => request('/api/notifications'),
   semanticSearch: (q, limit = 12) =>
     request(`/api/assistant/search?q=${encodeURIComponent(q)}&limit=${limit}`),

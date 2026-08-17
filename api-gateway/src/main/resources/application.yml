@@ -1,6 +1,11 @@
 server:
   port: 8080
 
+jwt:
+  # Must match user-service's jwt.secret - the gateway verifies tokens
+  # user-service issued, so both need the same signing key.
+  secret: ${JWT_SECRET:cloudmart-super-secret-signing-key-change-me-in-prod-0123456789}
+
 spring:
   application:
     name: api-gateway

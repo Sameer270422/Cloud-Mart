@@ -24,11 +24,15 @@ public class UserService {
         if (userRepository.existsByEmail(request.email())) {
             throw new IllegalArgumentException("Email already registered: " + request.email());
         }
+        // Simple bootstrap: the first account in a fresh system becomes the
+        // admin, since there's otherwise no way to reach ADMIN-only
+        // endpoints at all. Everyone after that is a regular customer.
+        User.Role role = userRepository.count() == 0 ? User.Role.ADMIN : User.Role.CUSTOMER;
         User user = User.builder()
                 .fullName(request.fullName())
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .role(User.Role.CUSTOMER)
+                .role(role)
                 .build();
         user = userRepository.save(user);
         return buildAuthResponse(user);

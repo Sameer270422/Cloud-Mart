@@ -13,8 +13,17 @@ public class UserController {
 
     private final UserRepository userRepository;
 
+    // Not admin-gated (no requester-role check) since a user looking up
+    // their own profile by id is legitimate - the requesterId check below
+    // is what actually matters. Returns 404 rather than 403 for a mismatch
+    // so this doesn't confirm/deny whether a given id exists to a caller
+    // who isn't its owner.
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getUser(@PathVariable Long id) {
+    public ResponseEntity<UserResponse> getUser(@PathVariable Long id,
+                                                 @RequestHeader("X-User-Id") Long requesterId) {
+        if (!id.equals(requesterId)) {
+            return ResponseEntity.notFound().build();
+        }
         return userRepository.findById(id)
                 .map(UserResponse::from)
                 .map(ResponseEntity::ok)

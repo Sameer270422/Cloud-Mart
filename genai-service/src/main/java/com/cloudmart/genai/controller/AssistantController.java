@@ -23,8 +23,9 @@ public class AssistantController {
     private final SemanticSearchService semanticSearchService;
 
     @PostMapping("/chat")
-    public ChatApiResponse chat(@Valid @RequestBody ChatApiRequest request) {
-        var result = assistantChatService.chat(request.conversationId(), request.userId(), request.message());
+    public ChatApiResponse chat(@Valid @RequestBody ChatApiRequest request,
+                                 @RequestHeader("X-User-Id") Long userId) {
+        var result = assistantChatService.chat(request.conversationId(), userId, request.message());
         return new ChatApiResponse(result.conversationId(), result.reply(), result.productCards());
     }
 

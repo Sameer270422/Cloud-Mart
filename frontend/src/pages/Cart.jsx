@@ -20,7 +20,6 @@ export default function Cart() {
     setError('');
     try {
       await api.placeOrder({
-        userId: user.id,
         items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       });
       clear();

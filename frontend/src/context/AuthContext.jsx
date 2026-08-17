@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 const AuthContext = createContext(null);
@@ -32,6 +32,11 @@ export function AuthProvider({ children }) {
     window.localStorage.removeItem('cloudmart_user');
     setUser(null);
   };
+
+  useEffect(() => {
+    window.addEventListener('cloudmart:unauthorized', logout);
+    return () => window.removeEventListener('cloudmart:unauthorized', logout);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout }}>

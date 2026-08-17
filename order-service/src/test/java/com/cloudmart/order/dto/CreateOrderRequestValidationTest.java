@@ -31,7 +31,7 @@ class CreateOrderRequestValidationTest {
 
     @Test
     void rejectsZeroQuantity() {
-        var request = new CreateOrderRequest(1L, List.of(new CreateOrderRequest.Item(1L, 0)));
+        var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(1L, 0)));
 
         Set<ConstraintViolation<CreateOrderRequest>> violations = validator.validate(request);
 
@@ -40,7 +40,7 @@ class CreateOrderRequestValidationTest {
 
     @Test
     void rejectsNegativeQuantity() {
-        var request = new CreateOrderRequest(1L, List.of(new CreateOrderRequest.Item(1L, -3)));
+        var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(1L, -3)));
 
         Set<ConstraintViolation<CreateOrderRequest>> violations = validator.validate(request);
 
@@ -49,7 +49,7 @@ class CreateOrderRequestValidationTest {
 
     @Test
     void acceptsPositiveQuantity() {
-        var request = new CreateOrderRequest(1L, List.of(new CreateOrderRequest.Item(1L, 2)));
+        var request = new CreateOrderRequest(List.of(new CreateOrderRequest.Item(1L, 2)));
 
         Set<ConstraintViolation<CreateOrderRequest>> violations = validator.validate(request);
 

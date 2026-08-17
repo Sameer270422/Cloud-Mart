@@ -90,6 +90,43 @@ Requires an `ANTHROPIC_API_KEY` (see **Running locally** below). Without
 one, the rest of the app works normally - only the assistant and semantic
 search degrade.
 
+## Authentication & authorization
+
+`user-service` issues a JWT on register/login (`{ userId, role }` claims,
+`role` is `CUSTOMER` or `ADMIN`). Every other service used to trust nothing
+at all - `api-gateway` just proxied requests, so anyone could hit
+`product-service`/`order-service`/`genai-service` directly with no token.
+
+`api-gateway`'s `JwtAuthenticationFilter` closes that gap: it's the only
+thing in the system that verifies a token. Unless a route is on the public
+allowlist (`POST /api/auth/**`, `GET /api/products/**`,
+`GET /api/assistant/search`), a request needs a valid `Authorization: Bearer
+<token>` or the gateway rejects it with 401 before it reaches any service.
+On success, it injects the verified identity as trusted headers -
+`X-User-Id`, `X-User-Email`, `X-User-Role` - stripping any client-supplied
+copies first so a request can't just set them itself. Downstream services
+trust these headers unconditionally; they never see or verify the token.
+
+What that buys, concretely:
+- `order-service` scopes every order lookup to `X-User-Id` - `GET
+  /api/orders` used to return every order in the system with no
+  parameters; now it's always the caller's own orders, and `GET
+  /api/orders/{id}` treats another user's order as not found rather than
+  returning it.
+- `genai-service`'s chat endpoint takes `userId` from the header, not the
+  request body - previously a client-supplied field, so anyone could ask
+  the assistant about another user's orders just by changing a number.
+- `product-service` requires `X-User-Role: ADMIN` to create/update/delete
+  products; browsing (`GET`) stays public. **The first account ever
+  registered on a fresh system becomes ADMIN automatically** (everyone
+  after that is a regular `CUSTOMER`) - there's no seed data or promotion
+  flow, so register first if you want to exercise the admin-only
+  endpoints.
+- `docker-compose.yml` no longer publishes host ports for anything except
+  `api-gateway` and `frontend` - the other services are only reachable
+  from inside the compose network, so the gateway can't be bypassed
+  locally either.
+
 ## Tech Stack
 
 - **Backend:** Java 17, Spring Boot 3, Spring Data JPA, Spring Security (JWT), Spring Kafka, Spring Cloud Gateway, Resilience4j
@@ -140,13 +177,16 @@ npm run dev
 
 ## Example flow
 
-1. `POST /api/auth/register` → creates a user, returns a JWT
-2. `GET /api/products` → browse the catalog
-3. `POST /api/orders` with `{ userId, items: [{ productId, quantity }] }`:
+1. `POST /api/auth/register` → creates a user, returns a JWT (the first
+   registration on a fresh system gets `ADMIN`, everyone else `CUSTOMER`)
+2. `GET /api/products` → browse the catalog (public, no token needed)
+3. `POST /api/orders` with `Authorization: Bearer <token>` and
+   `{ items: [{ productId, quantity }] }` - `userId` comes from the token,
+   not the request body:
    - `order-service` calls `product-service` to validate stock and reserve it
    - order is persisted, total computed from live product prices
    - an `OrderEvent` is published to the `order-events` Kafka topic
-4. `notification-service` consumes the event and logs/stores a simulated
+4. `notification-service` consumes the event and persists a simulated
    confirmation, visible at `GET /api/notifications`
 
 ## Testing
@@ -157,6 +197,7 @@ cd product-service && mvn test  # uses H2 in-memory DB
 cd user-service && mvn test
 cd notification-service && mvn test  # embedded Kafka + H2
 cd genai-service && mvn test    # Claude calls are mocked - no API key needed
+cd api-gateway && mvn test      # JWT filter tests use a local test secret
 ```
 
 ## CI/CD

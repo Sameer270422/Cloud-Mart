@@ -3,6 +3,9 @@ package com.cloudmart.genai.client;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -24,15 +27,28 @@ public class OrderServiceClient {
         this.orderServiceUrl = orderServiceUrl;
     }
 
+    // order-service's order endpoints require X-User-Id (it trusts the
+    // header unconditionally, same as every other service behind the
+    // gateway) - genai-service asserts the identity it was itself handed
+    // by the gateway on the inbound request, since that's exactly who
+    // these lookups are being made on behalf of.
+    private HttpEntity<Void> withUserId(Long userId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-User-Id", String.valueOf(userId));
+        return new HttpEntity<>(headers);
+    }
+
     /**
-     * order-service itself doesn't scope orders by caller identity (no
-     * gateway-level auth yet), so the assistant enforces it here: an order
-     * that exists but belongs to a different user is treated exactly like
-     * a missing one, rather than exposing its details through the chat.
+     * Belt-and-suspenders: order-service already scopes GET /api/orders/{id}
+     * to the caller via X-User-Id (a mismatched order comes back as a 404),
+     * but the userId equality check stays here too in case that ever
+     * changes - the assistant should never expose another user's order
+     * regardless of what the header-based check does upstream.
      */
     public Optional<OrderDto> getOrderForUser(Long orderId, Long userId) {
         try {
-            OrderDto order = restTemplate.getForObject(orderServiceUrl + "/api/orders/" + orderId, OrderDto.class);
+            OrderDto order = restTemplate.exchange(orderServiceUrl + "/api/orders/" + orderId,
+                    HttpMethod.GET, withUserId(userId), OrderDto.class).getBody();
             if (order == null || !userId.equals(order.getUserId())) {
                 return Optional.empty();
             }
@@ -44,8 +60,8 @@ public class OrderServiceClient {
 
     public List<OrderDto> listByUser(Long userId) {
         try {
-            OrderDto[] orders = restTemplate.getForObject(
-                    orderServiceUrl + "/api/orders?userId=" + userId, OrderDto[].class);
+            OrderDto[] orders = restTemplate.exchange(orderServiceUrl + "/api/orders",
+                    HttpMethod.GET, withUserId(userId), OrderDto[].class).getBody();
             return orders == null ? List.of() : List.of(orders);
         } catch (RestClientException ex) {
             return List.of();
