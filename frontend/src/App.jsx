@@ -7,11 +7,18 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Cart from './pages/Cart.jsx';
 import Orders from './pages/Orders.jsx';
+import Admin from './pages/Admin.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
 function RequireAuth({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
+}
+
+function RequireAdmin({ children }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return user.role === 'ADMIN' ? children : <Navigate to="/" replace />;
 }
 
 export default function App() {
@@ -30,6 +37,14 @@ export default function App() {
               <RequireAuth>
                 <Orders />
               </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <Admin />
+              </RequireAdmin>
             }
           />
         </Routes>
