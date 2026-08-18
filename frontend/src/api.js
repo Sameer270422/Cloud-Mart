@@ -43,6 +43,7 @@ export const api = {
     return request(`/api/products${qs ? `?${qs}` : ''}`);
   },
   getProduct: (id) => request(`/api/products/${id}`),
+  getCategories: () => request('/api/products/categories'),
   placeOrder: (data) => request('/api/orders', { method: 'POST', body: JSON.stringify(data) }),
   listOrders: () => request('/api/orders'),
   listNotifications: () => request('/api/notifications'),
