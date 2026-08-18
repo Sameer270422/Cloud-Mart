@@ -24,6 +24,7 @@ export default function Navbar() {
         {user ? (
           <>
             <Link to="/orders">My Orders</Link>
+            {user.role === 'ADMIN' && <Link to="/admin">Admin</Link>}
             <span className="user-chip">
               <span className="avatar" aria-hidden="true">{initials}</span>
               {user.fullName}
