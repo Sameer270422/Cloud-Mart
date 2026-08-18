@@ -32,6 +32,8 @@ public class Product {
 
     private String category;
 
+    private String subcategory;
+
     @DecimalMin(value = "0.0", inclusive = false)
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;

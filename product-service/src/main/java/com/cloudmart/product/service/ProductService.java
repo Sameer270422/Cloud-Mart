@@ -1,12 +1,16 @@
 package com.cloudmart.product.service;
 
+import com.cloudmart.product.dto.CategoryNode;
 import com.cloudmart.product.model.Product;
 import com.cloudmart.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.TreeSet;
 
 @Service
 @RequiredArgsConstructor
@@ -14,7 +18,10 @@ public class ProductService {
 
     private final ProductRepository productRepository;
 
-    public List<Product> findAll(String category, String search) {
+    public List<Product> findAll(String category, String subcategory, String search) {
+        if (category != null && !category.isBlank() && subcategory != null && !subcategory.isBlank()) {
+            return productRepository.findByCategoryIgnoreCaseAndSubcategoryIgnoreCase(category, subcategory);
+        }
         if (category != null && !category.isBlank()) {
             return productRepository.findByCategoryIgnoreCase(category);
         }
@@ -22,6 +29,27 @@ public class ProductService {
             return productRepository.findByNameContainingIgnoreCase(search);
         }
         return productRepository.findAll();
+    }
+
+    // Derived from the live catalog rather than a separately-managed table -
+    // for a catalog this size there's no real category-management workflow
+    // to speak of, and deriving it means the sidebar can never drift out of
+    // sync with what's actually in stock.
+    public List<CategoryNode> getCategoryTree() {
+        var byCategory = new LinkedHashMap<String, TreeSet<String>>();
+        for (Product p : productRepository.findAll()) {
+            if (p.getCategory() == null || p.getCategory().isBlank()) {
+                continue;
+            }
+            var subcategories = byCategory.computeIfAbsent(p.getCategory(), c -> new TreeSet<>());
+            if (p.getSubcategory() != null && !p.getSubcategory().isBlank()) {
+                subcategories.add(p.getSubcategory());
+            }
+        }
+        return byCategory.entrySet().stream()
+                .sorted(Comparator.comparing(java.util.Map.Entry::getKey))
+                .map(e -> new CategoryNode(e.getKey(), List.copyOf(e.getValue())))
+                .toList();
     }
 
     public Product findById(Long id) {
@@ -38,6 +66,7 @@ public class ProductService {
         existing.setName(updated.getName());
         existing.setDescription(updated.getDescription());
         existing.setCategory(updated.getCategory());
+        existing.setSubcategory(updated.getSubcategory());
         existing.setPrice(updated.getPrice());
         existing.setStockQuantity(updated.getStockQuantity());
         return productRepository.save(existing);

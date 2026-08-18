@@ -1,5 +1,6 @@
 package com.cloudmart.product.controller;
 
+import com.cloudmart.product.dto.CategoryNode;
 import com.cloudmart.product.model.Product;
 import com.cloudmart.product.service.ProductService;
 import jakarta.validation.Valid;
@@ -26,8 +27,14 @@ public class ProductController {
 
     @GetMapping
     public List<Product> list(@RequestParam(required = false) String category,
+                               @RequestParam(required = false) String subcategory,
                                @RequestParam(required = false) String search) {
-        return productService.findAll(category, search);
+        return productService.findAll(category, subcategory, search);
+    }
+
+    @GetMapping("/categories")
+    public List<CategoryNode> categories() {
+        return productService.getCategoryTree();
     }
 
     @GetMapping("/{id}")
